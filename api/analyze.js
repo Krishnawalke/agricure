@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Allow CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -10,34 +9,10 @@ export default async function handler(req, res) {
   const { image, mimeType } = req.body;
   if (!image) return res.status(400).json({ error: 'No image provided' });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'Gemini API key not configured' });
 
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mimeType || 'image/jpeg',
-                data: image
-              }
-            },
-            {
-              type: 'text',
-              text: `You are an expert agricultural plant pathologist with 20+ years of experience.
+  const prompt = `You are an expert agricultural plant pathologist with 20+ years of experience.
 
 TASK: Carefully examine this image and determine:
 1. Is this a plant/crop image at all?
@@ -45,28 +20,49 @@ TASK: Carefully examine this image and determine:
 3. Does it show any disease, pest damage, or is it healthy?
 
 IMPORTANT RULES:
-- If the image is NOT a plant (e.g. a person, animal, object, screenshot, code, etc.), respond with isPlant: false
-- If it IS a plant, give a detailed, accurate disease diagnosis
-- Be specific - different diseases look very different (rust vs blight vs mosaic virus vs nutrient deficiency)
+- If the image is NOT a plant, set isPlant to false
+- If it IS a plant, give a detailed accurate disease diagnosis
+- Be specific about the disease type
 - Severity should reflect actual visible damage (0-100)
 
 Respond ONLY in this exact JSON format, no markdown, no extra text:
 {
-  "isPlant": true or false,
-  "disease": "<specific disease name, or 'Healthy Crop' if no disease>",
+  "isPlant": true,
+  "disease": "<specific disease name, or Healthy Crop if no disease>",
   "crop": "<crop/plant type you identified>",
-  "severity": <0-100, where 0=healthy, 100=severe>,
-  "confidence": <0-100, how confident you are>,
+  "severity": <0-100>,
+  "confidence": <0-100>,
   "description": "<2-3 specific sentences describing exactly what you see in THIS image>",
   "treatments": ["<specific treatment 1>", "<specific treatment 2>", "<specific treatment 3>"],
   "prevention": "<one specific prevention tip for this disease>",
-  "notPlantMessage": "<if not a plant, friendly message explaining this>"
-}`
-            }
-          ]
-        }]
-      })
-    });
+  "notPlantMessage": "<only fill this if isPlant is false>"
+}`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              {
+                inline_data: {
+                  mime_type: mimeType || 'image/jpeg',
+                  data: image
+                }
+              },
+              { text: prompt }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 1000
+          }
+        })
+      }
+    );
 
     const data = await response.json();
 
@@ -74,14 +70,14 @@ Respond ONLY in this exact JSON format, no markdown, no extra text:
       return res.status(500).json({ error: data.error.message });
     }
 
-    const raw = data.content.map(i => i.text || '').join('');
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const cleaned = raw.replace(/```json|```/g, '').trim();
     const result = JSON.parse(cleaned);
 
     return res.status(200).json(result);
 
   } catch (err) {
-    console.error('Analyze error:', err);
+    console.error('Gemini error:', err);
     return res.status(500).json({ error: err.message });
   }
 }
