@@ -872,54 +872,104 @@ async function analyzeImage(){
   const reader = new FileReader();
   reader.onload = async e => {
     const base64 = e.target.result.split(',')[1];
+    const mimeType = selectedFile.type || 'image/jpeg';
     let result;
-    try{
-      const resp = await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          model:"claude-sonnet-4-20250514", max_tokens:1000,
-          messages:[{role:"user", content:[
-            {type:"image", source:{type:"base64", media_type: selectedFile.type||"image/jpeg", data: base64}},
-            {type:"text", text:`You are an expert agricultural scientist. Analyze this crop/plant image carefully.
-Respond ONLY in this exact JSON format with no markdown or extra text:
-{"disease":"<disease name or Healthy Crop>","severity":<number 0-100>,"description":"<2 clear sentences about what you see>","treatments":["<treatment 1>","<treatment 2>","<treatment 3>"],"prevention":"<one practical prevention tip>"}`}
-          ]}]
-        })
+
+    try {
+      // Call our secure Vercel backend API route
+      const resp = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64, mimeType })
       });
-      const data = await resp.json();
-      if(data.error){ throw new Error(data.error.message); }
-      const raw = data.content.map(i=>i.text||'').join('');
-      result = JSON.parse(raw.replace(/```json|```/g,'').trim());
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData.error || 'API error');
+      }
+
+      result = await resp.json();
+
     } catch(err) {
-      console.warn('AI API error, using demo result:', err.message);
-      result = {
-        disease:"Leaf Blight (Demo Mode)", severity:65,
-        description:"Brown spots with yellow halos visible on leaf surface indicate fungal blight at moderate stage. This commonly affects crops during humid weather conditions.",
-        treatments:["Apply copper-based fungicide every 7 days","Remove and destroy all infected leaves immediately","Improve air circulation between plant rows"],
-        prevention:"Water at the base of plants only; avoid wetting leaves. Ensure good drainage."
-      };
+      console.error('Analysis error:', err.message);
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('analyze-btn').style.display = 'block';
+      showToast('Analysis failed: ' + err.message, 'error');
+      document.getElementById('result-placeholder').style.display = 'flex';
+      return;
     }
-    showResult(result);
-    await saveToFirebase('scans',{
-      disease:result.disease, severity:result.severity,
-      description:result.description, fileName:selectedFile.name
-    });
+
     document.getElementById('spinner').style.display = 'none';
+
+    // Not a plant image
+    if (!result.isPlant) {
+      showNotPlantResult(result.notPlantMessage || 'This does not appear to be a plant or crop image. Please upload a clear photo of a plant leaf or crop.');
+      return;
+    }
+
+    showResult(result);
+
+    // Only save to Firebase if it's a real plant
+    await saveToFirebase('scans', {
+      disease: result.disease,
+      crop: result.crop || 'Unknown',
+      severity: result.severity,
+      confidence: result.confidence,
+      description: result.description,
+      fileName: selectedFile.name
+    });
   };
   reader.readAsDataURL(selectedFile);
 }
 
+function showNotPlantResult(message) {
+  // Show a friendly "not a plant" message instead of disease result
+  document.getElementById('result-placeholder').style.display = 'none';
+  document.getElementById('result-content').style.display = 'flex';
+  document.getElementById('disease-name').innerHTML = '⚠️ Not a Plant Image';
+  document.getElementById('disease-name').style.color = 'var(--accent)';
+  document.getElementById('result-text').textContent = message;
+  document.getElementById('sev-pct').textContent = '—';
+  document.getElementById('sev-fill').style.width = '0%';
+  const list = document.getElementById('treatment-list');
+  list.innerHTML = '<li>📸 Please upload a clear photo of a crop leaf or plant to get an accurate disease diagnosis.</li>';
+  document.getElementById('analyze-btn').style.display = 'block';
+}
+
 function showResult(r){
-  document.getElementById('disease-name').textContent = r.disease;
-  document.getElementById('result-text').textContent  = r.description;
-  const pct = r.severity+'%';
+  // Color disease name based on severity
+  const nameEl = document.getElementById('disease-name');
+  nameEl.textContent = (r.crop ? r.crop + ' — ' : '') + r.disease;
+  nameEl.style.color = r.severity === 0 ? 'var(--green)' :
+                       r.severity < 40  ? 'var(--lime)'  :
+                       r.severity < 70  ? 'var(--accent)': 'var(--red)';
+
+  // Confidence badge
+  const confText = r.confidence ? ` (${r.confidence}% confidence)` : '';
+  document.getElementById('result-text').textContent = r.description + confText;
+
+  const pct = r.severity + '%';
   document.getElementById('sev-pct').textContent = pct;
   setTimeout(()=>{ document.getElementById('sev-fill').style.width = pct; }, 100);
+
   const list = document.getElementById('treatment-list');
   list.innerHTML = '';
-  r.treatments.forEach(t=>{ const li=document.createElement('li'); li.textContent='💊 '+t; list.appendChild(li); });
-  if(r.prevention){ const li=document.createElement('li'); li.textContent='🛡️ '+r.prevention; list.appendChild(li); }
+  if (r.severity === 0) {
+    const li = document.createElement('li');
+    li.textContent = '✅ Your crop looks healthy! Keep up good farming practices.';
+    list.appendChild(li);
+  } else {
+    (r.treatments || []).forEach(treatment => {
+      const li = document.createElement('li');
+      li.textContent = '💊 ' + treatment;
+      list.appendChild(li);
+    });
+  }
+  if (r.prevention) {
+    const li = document.createElement('li');
+    li.textContent = '🛡️ ' + r.prevention;
+    list.appendChild(li);
+  }
   document.getElementById('result-content').style.display = 'flex';
 }
 
