@@ -18,7 +18,7 @@ Analyze this image and respond ONLY in this exact JSON format, no markdown, no e
 {"isPlant":true,"disease":"<disease name or Healthy Crop>","crop":"<crop type>","severity":<0-100>,"confidence":<0-100>,"description":"<2 sentences>","treatments":["<t1>","<t2>","<t3>"],"prevention":"<tip>","notPlantMessage":""}`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
