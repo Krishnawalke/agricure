@@ -118,7 +118,7 @@ def load_model():
     global model, classes
     
     model_path = './model/plant_disease_model.pth'
-    classes_path = './model/classes.json'
+    classes_path = './model/disease_classes.json'
     
     if not os.path.exists(model_path):
         print("⚠️  No trained model found. Using demo mode.")
