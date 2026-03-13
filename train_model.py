@@ -28,10 +28,10 @@ CONFIG = {
     'data_dir': './dataset/plantvillage/color',
     'model_save_path': './model/plant_disease_model.pth',
     'classes_save_path': './model/classes.json',
-    'image_size': 128,
+    'image_size': 224,
     'batch_size': 64,
-    'num_epochs': 5,
-    'learning_rate': 0.001,
+    'num_epochs': 15,
+    'learning_rate': 0.0001,
     'val_split': 0.2,
     'num_workers': 0,
     'device': 'cuda' if torch.cuda.is_available() else 'cpu'
