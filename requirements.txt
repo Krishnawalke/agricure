@@ -1,8 +1,8 @@
 numpy==1.26.4
-flask
-flask-cors
-pillow
+flask==3.0.2
+flask-cors==4.0.0
+pillow==10.2.0
+scikit-learn==1.4.1
 
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.2.0+cpu
-torchvision==0.17.0+cpu
+torch==2.2.0
+torchvision==0.17.0
