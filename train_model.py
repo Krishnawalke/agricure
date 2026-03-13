@@ -25,7 +25,7 @@ import time
 # CONFIG
 # ═══════════════════════════════
 CONFIG = {
-    'data_dir': './dataset/plantvillage',
+    'data_dir': './dataset/plantvillage/color',
     'model_save_path': './model/plant_disease_model.pth',
     'classes_save_path': './model/classes.json',
     'image_size': 128,
