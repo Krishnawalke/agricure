@@ -23,11 +23,16 @@ export default async function handler(req, res) {
     const mlServerUrl = process.env.ML_SERVER_URL;
     if (mlServerUrl) {
       try {
+        // Wake up the server first
+        await fetch(`${mlServerUrl}/health`, {
+          signal: AbortSignal.timeout(30000)
+        }).catch(() => {});
+        
         const mlResponse = await fetch(`${mlServerUrl}/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image }),
-          signal: AbortSignal.timeout(15000)
+          signal: AbortSignal.timeout(55000)
         });
         
         if (mlResponse.ok) {
